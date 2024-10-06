@@ -3,58 +3,62 @@ import pathlib
 import os
 import sys
 import subprocess
-import humanize
-from datetime import datetime
+import humanize as hm
+import datetime as dt
+from collections import Counter
 from prettytable import PrettyTable
 
 #############################################################################################################
 # Global variables
 #############################################################################################################
-START_TIME = datetime.now()
+SCRIPT_NAME = os.path.basename(__file__)
+START_TIME = dt.datetime.now()
 TORBASE = os.getenv('TORBASE')
 LOCATIONS_FILE = os.path.join(TORBASE, 'Folder_Locations_v4.csv')
 SYMLINK_BASE = os.path.join(TORBASE, 'zzzNew/')
-MARKER_CHAR = '#'
+# MARKER_CHAR = '#'
 SPACER = '   '
+
+
+SEARCH_PARAM_TROW_DIVIDER = f'+{"-" * 18}+{"-" * 59}+'
+SYMLINK_TROW_DIVIDER = f'+{"-" * 79}+{"-" * 14}+'
 #############################################################################################################
 # End Globals
 #############################################################################################################
 
 
 #############################################################################################################
-def item_search(item):
+def item_search(string):
     results_list = []
-    grep_cmd = f'grep -i "{item}" {LOCATIONS_FILE} | cut -d$\'\t\' -f2'
+    grep_cmd = f'grep -i "{string}" {LOCATIONS_FILE} | cut -d$\'\t\' -f2'
     try:
         grep_result = subprocess.run(
-            grep_cmd, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            grep_cmd,
+            shell=True,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
         ).stdout.decode('utf-8').split('\n')
-    except subprocess.CalledProcessError as e:
-        # Handle the error if grep returns a non-zero exit status
-        if e.returncode == 1:
-            # No matches found
+    except subprocess.CalledProcessError as e:  # Handle the error if grep returns a non-zero exit status
+        if e.returncode == 1: # No matches found
             return 0
-        else:
-            # Other errors (e.g., file not found, permission denied, etc.)
+        else:  # Other errors (e.g., file not found, permission denied, etc.)
             return str(e.stderr.decode('utf-8'))
 
-    # Search for item returned a non error value, so proceeding
-    if not grep_result:
-        # Nothing found
+    # Search returned a non-error value, so proceeding
+    if not grep_result:  # Nothing found
         return 0
-    else:
-        # Found item in index
+    else:  # Found item in index
         for result in grep_result:
             r = result.strip()
-            if not r:
-                # After stripping leading and trailing whitespace, there was nothing left
+            if not r:  # After stripping leading and trailing whitespace, there was nothing left
                 continue
             else:
                 results_list.append(r)
-
     if not results_list:
         return 0
     else:
+        print(f'Function "item_search" returns a list of {type(results_list[0])}')
         return results_list
 #############################################################################################################
 
@@ -64,45 +68,88 @@ def create_symlink(item_path):
     symlink_cmd = f'ln -s "{item_path}" {SYMLINK_BASE}'
     try:
         subprocess.run(
-            symlink_cmd, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            symlink_cmd,
+            shell=True,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
         ).stdout.decode('utf-8')
+        return 1
     except subprocess.CalledProcessError as e:
         return str(e)
-
-    return 1
 #############################################################################################################
 
 
 #############################################################################################################
 def main():
-    print(f'\n\n{MARKER_CHAR * 100}')
-    if len(sys.argv) == 1:
+    # SEARCH_PARAM_TROW_DIVIDER = f'+{"-" * 18}+{"-" * 59}+'
+    # SYMLINK_TROW_DIVIDER = f'+{"-" * 79}+{"-" * 14}+'
+    print(f'\n{"#" * 100}')
+    print(f'Starting execution of {SCRIPT_NAME}\n')
+
+    if not len(sys.argv) >= 2:
         print(f'Execution requires search parameter, but none detected. Try again.....')
-        # print(f'Exiting..... Total runtime:\t\t {humanize.precisedelta(datetime.now() - START_TIME)}')
-        print('{:<70} {:>20}'.format('Exiting..... Total runtime:', humanize.precisedelta(datetime.now() - START_TIME)))
-        print(f'{MARKER_CHAR * 100}\n\n')
+        print('{:<70} {:>20}'.format('Total runtime:', hm.precisedelta(dt.datetime.now() - START_TIME)))
+        print(f'{"#" * 100}\n\n')
         quit(0)
 
-    param_list = sys.argv[1:]
+    # Create de-duped list from passed parameters
+    param_list = list(dict.fromkeys(sys.argv[1:]))
+    param_count = len(param_list)
+
+    # Search Index for each passed parameter
+    print(f'+{"-" * 78}+')
+    print(f'| {"Search Parameters":^76} |')
+    print(SEARCH_PARAM_TROW_DIVIDER)
+    print('| {:^16} | {:^57} |'.format("Index:", LOCATIONS_FILE))
+    print('| {:^16} | {:^57} |'.format("Search Items:", param_count))
+    print(f'+{"-" * 18}+{"-" * 59}+')
+
     param_dict = {}
-    for item in sys.argv[1:]:
-        result = item_search(item)
-        if isinstance(result, list):
-            param_dict[item] = {
+    counter = 1
+    for param in param_list:
+        # print('| {:^16} | {:^57} |'.format("Result:", param_dict['string']))
+        print('| {:^16} | {:^57} |'.format(f'Item {counter}:', param_dict['string']))
+        result = item_search(param)
+        if not isinstance(result, list):
+            param_dict[param] = {
                 'type': 'list',
-                'string': 'SUCCESS!!!'
-            }
-        elif isinstance(result, int):
-            param_dict[item] = {
-                'type': 'int',
                 'string': 'NOT FOUND!!!'
             }
         else:
-            param_dict[item] = {
-                'type': 'string',
-                'string': f'ERROR!!!\n{result}'
+            param_dict[param] = {
+                'type': 'list',
+                'string': 'SUCCESS!!!'
             }
+        # elif isinstance(result, int):
+        #     param_dict[param] = {
+        #         'type': 'int',
+        #         'string': 'NOT FOUND!!!'
+        #     }
+        # else:
+        #     param_dict[param] = {
+        #         'type': 'string',
+        #         'string': f'ERROR!!!\n{result}'
+        #     }
+        # print(param_dict)
+        print('| {:^16} | {:^57} |'.format("Search Result:", param_dict['string']))
+        counter += 1
 
+'''
+    for item in param_list:
+        k, v = item.split(',')
+'''
+'''
+    for item in param_list:
+        item_lookup = item_search(item)
+        if isinstance(item_lookup, list):
+            print('{:^80} \t{:^15}'.format('Name          ', 'Result'))
+            print(f'+{dash * 79}+{dash * 14}+
+            print(('| '))
+'''
+    # type_counts = Counter(item['type'] for item in param_dict.values())
+
+'''
     for item in param_list:
         param_table = PrettyTable()
         param_table.field_names = ['Search Parameters', '']
@@ -132,8 +179,9 @@ def main():
         print(f'\nCreating symlinks for each result:')
         result_table.align["Name"] = "l"
         print(result_table)
-    print('{:<71} {:>20}'.format('Execution complete. Total runtime:', humanize.precisedelta(datetime.now() - START_TIME)))
-    print(f'{MARKER_CHAR * 100}\n\n')
+'''
+    print('{:<71} {:>20}'.format('Execution complete. Total runtime:', hm.precisedelta(dt.datetime.now() - START_TIME)))
+    print(f'{"#" * 100}\n\n')
 #############################################################################################################
 
 
